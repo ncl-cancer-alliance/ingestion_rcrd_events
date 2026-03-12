@@ -1,28 +1,73 @@
-# NCL Cancer Alliance Project Template
+# Ingestion RCRD Events
 
-This git repository contains a shell that should be used as the default structure for new projects
-in the analytical team.  It won't fit all circumstances perfectly, and you can make changes and issue a 
-pull request for new features / changes.
+Ingestion pipeline for the RCRD Events data supplied by the National Cancer Team via the NDRS data sharing - Data Extracts SharePoint page.
 
-The aim of this template is two-fold: firstly to give a common structure for analytical projects to aid
-reproducibility, secondly to allow for additional security settings as default to prevent accidental upload of files that should not be committed to Git and GitHub.
+## Quick Start
+ ```bash
+# Clone and setup
+git clone https://github.com/ncl-cancer-alliance/ingestion_cosd
 
-__Please update/replace this README file with one relevant to your project__
+#Setup virtual environment (venv)
+python -m venv venv
 
-## To use this template, please use the following practises:
+#Enable virutal environment (venv)
+Set-ExecutionPolicy Unrestricted -Scope Process;  venv\Scripts\activate
 
-* Put any data files in the `data` folder.  This folder is explicitly named in the .gitignore file.  A further layer of security is that all xls, xlsx, csv and pdf files are also explicit ignored in the whole folder as well.  ___If you need to commit one of these files, you must use the `-f` (force) command in `commit`, but you must be sure there is no identifiable data.__
-* Save any documentation in the `docs` file.  This does not mean you should avoid commenting your code, but if you have an operating procedure or supporting documents, add them to this folder.
-* Please save all output: data, formatted tables, graphs etc. in the output folder.  This is also implicitly ignored by git, but you can use the `-f` (force) command in `commit` to add any you wish to publish to github.
+#Install the project packages to the virtual environment
+pip install ./requirements.txt -r
 
+#Manually install the snowflake-connector-python package (this prevents having to authenticate via the Snowflake browser multiple times)
+pip install snowflake-connector-python[secure-local-storage]
+```
 
-### Please also consider the following:
-* Linting your code.  This is a formatting process that follows a rule set.  We broadly encourage the tidyverse standard, and recommend the `lintr` package.
-* Comment your code to make sure others can follow.
-* Consider your naming conventions: we recommend `snake case` where spaces are replaced by underscores and no capitals are use. E.g. `outpatient_referral_data`
+To use this code, you will need to add the **NDRS data sharing - Data Extracts** SharePoint page as a shortcut in your personal OneDrive account and will need to be able to access files via this on your machine. ([Guide](https://support.microsoft.com/en-us/office/add-shortcuts-to-shared-folders-in-onedrive-d66b1347-99b7-4470-9360-ffc048d35a33)).
 
+The expected path to the data files is (where the bold fields are set in the .env file): `C:\Users\$USERNAME$\OneDrive - NHS\NDRS data sharing - Data_Extracts\` but this can be altered in the .env file to pull data from other locations.
 
-This repository is dual licensed under the [Open Government v3]([https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/) & MIT. All code can outputs are subject to Crown Copyright.
+You will also need to set up a Snowflake Connection via Snowflake CLI to run the Snowflake CLI commands within the main.py script. The process for setting this up is outlined here (it is recommended you name the connection source "conn_rcrd_events" otherwise you will need to update your .env file with the name you chose): [Internal Scripting Guide](https://nhs.sharepoint.com/:w:/r/sites/msteams_38dd8f/Shared%20Documents/Document%20Library/Documents/Git%20Integration/Internal%20Scripting%20Guide.docx?d=wc124f806fcd8401b8d8e051ce9daab87&csf=1&web=1&e=qt05xI)
+
+## Snowflake Setup
+The tables themselves are automatically created on ingestion but the following resources need to be made in Snowflake ahead of running the code:
+* The schema used to hold the destination tables, stages, and file formats
+* 3 Stages (as configured in the .env file, can be created on the Snowflake website):
+    * STAGE_NAME_EXAMPLE - Stage for the Example file
+    * STAGE_NAME_NATIONAL - Stage for the National files
+    * STAGE_NAME_CA - Stage for the Cancer Alliance files
+* 2 File formats (that inform Snowflake how to parse the data files):
+    * FILE_FORMAT_INFER_SCHEMA - See docs/rcrd_events_infer_schema.sql
+    * FILE_FORMAT_LOAD_STAGE_DATA - See docs/rcrd_events_load_stage_data.sql
+
+## What This Project Does
+This code ingests the latest data files in the NDRS data sharing - Data_Extracts location by staging them in Snowflake and then creating the RCRD Events tables using the staged files. By default, this code only ingests the Inc_Trt files (both the national and Cancer Alliance specific ones) but can be configured in the .env file to ingest all files.
+
+The destination table schema is currently: `DATA_LAKE__NCL.CANCER__RCRD_EVENTS`
+
+## Usage
+### Process
+* Complete the Quick Start process above before running for the first time
+* Enable the venv and configure the .env (see below) file accordingly
+* Run the src/main.py script (this can take upto 20 minutes due to the large size of the files).
+
+### .env Configurations
+The sample.env contains suggested values for the non-credential based settings.
+* Snowflake account settings:
+    * SNOWFLAKE_ACCOUNT - The "Account identifier" as seen in the Account Details page on the Snowflake website
+    * SNOWFLAKE_USER - Your email address
+    * SNOWFLAKE_ROLE - At least "ENGINEER" is required for this code
+    * SNOWFLAKE_WAREHOUSE - The warehouse to use for processing on the Snowflake client side
+* Directory settings:
+    * NHS_ONEDRIVE_DIR - How your OneDrive directory appears in your file explorer, typically "OneDrive - NHS"
+    * DATA_SHAREPOINT_DIR - Path between the OneDrive root folder and the data files
+* Destination settings:
+    * SFCLI_CONNECTION_NAME - Name of the Snowflake CLI connection created as detailed in the Internal Scripting Guide
+    * DATABASE - Snowflake database to store the data
+    * SCHEMA - Snowflake schema to store the data
+    * TABLE_NAME_CA - Table name for the Cancer Alliance data
+    * STAGE_NAME_* - Stage names as detailed above
+    * FILE_FORMAT_* - File formats as detailed above
+* Runtime settings:
+    * INGESTION_OVERWRITE - When set to True, files that already exist in the stage will be reuploaded
+    * INGEST_ALL_NATIONAL_FILES - When set to True, all national files are ingested, otherwise only the Inc_Trt data file is
 
 ## Scripting Guidance
 
@@ -32,28 +77,15 @@ The Internal Scripting Guide is available here: [Internal Scripting Guide](https
 
 ## Changelog
 
-### [1.0.0] - 2025-04-08
+### [1.0.0] - 2026-03-12
 #### Added
-- Initial release of the project template
+- Initial release of the code
 
-### [1.1.0] - 2025-05-15
-#### Added
-- Added sample.env file to the template
-#### Modified
-- Added toml to requirements.txt file
-
-### [1.1.1] - 2025-05-28
-#### Modified
-- References to the NCL ICB scripting documentation have been replaced with the internal documentation.
-
-### [1.2.0] - 2025-07-17
-#### Added
-- Updated requirements.txt to better support snowflake packages
-
-*The contents and structure of this template were largely based on the template used by the NCL ICB Analytics team available here: [NCL ICB Project Template](https://github.com/ncl-icb-analytics/ncl_project)*
 
 ## Licence
 This repository is dual licensed under the [Open Government v3]([https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/) & MIT. All code can outputs are subject to Crown Copyright.
 
 ## Contact
 Jake Kealey - jake.kealey@nhs.net
+
+*The contents and structure of this template were largely based on the template used by the NCL ICB Analytics team available here: [NCL ICB Project Template](https://github.com/ncl-icb-analytics/ncl_project)*
